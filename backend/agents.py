@@ -1,8 +1,11 @@
 """The two LLM agents. Advisor: chat + metadata extraction, with the rules engine and ML ranker as tools.
 KYC: reads document images into fields. Every decision (eligibility, price, validity) is made by code."""
 import csv
+import hashlib
 import json
 import os
+import time
+from pathlib import Path
 
 from google import genai
 from google.genai import types
@@ -12,14 +15,42 @@ import kyc
 from privacy import detokenize, tokenize
 from ranker import score_products
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# first model that answers wins; the newest models often return 503 under load, and each has its own quota
+MODELS = [m.strip() for m in os.environ.get("GEMINI_MODELS", ",".join([
+    "gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash",
+    "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"])).split(",")]
+QUOTA = ("429", "RESOURCE_EXHAUSTED")
+BUSY = ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED", "NOT_FOUND", "imed out", "Timeout")
+_exhausted = {}  # model -> time until which it is skipped (1 h after a quota error, 10 min after a timeout)
 _client = None
+
+
+def with_fallback(call):
+    """call(model) -> result. Tries each model in MODELS until one is neither overloaded nor out of quota."""
+    err = None
+    for m in MODELS:
+        if _exhausted.get(m, 0) > time.time():
+            continue
+        try:
+            return call(m)
+        except Exception as e:  # noqa: BLE001 - only overload/quota errors move on to the next model
+            msg = f"{type(e).__name__} {e}"
+            if any(c in msg for c in QUOTA):
+                _exhausted[m] = time.time() + 3600
+            elif any(c in msg for c in BUSY):
+                _exhausted[m] = time.time() + (600 if "DEADLINE" in msg or "imeout" in msg or "504" in msg else 0)
+            else:
+                raise
+            err = e
+    raise err or RuntimeError("all models are out of quota for now")
 
 
 def client():
     global _client
     if _client is None:
-        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        # no SDK-level retries/backoff: a busy model should fail fast so with_fallback can try the next one
+        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"], http_options=types.HttpOptions(
+            timeout=15_000, retry_options=types.HttpRetryOptions(attempts=1)))
     return _client
 
 
@@ -45,9 +76,11 @@ WHAT TO LEARN (call update_profile as soon as you learn anything, even mid-conve
 Infer what you safely can (a "kirana in Pune" is micro, tier 1); ask only for what is missing.
 
 RECOMMEND: once you know segment, employees, sites, city and GST status, call recommend_bundle. Pass product ids
-the owner explicitly asked for in wanted_product_ids. Then explain the bundle in 3-5 short lines: what each
-product does for THEIR business (use the reasons from the tool), the monthly total and one-time setup. Say they can
-switch add-ons on/off and pick a longer contract for a lower price on the next screen.
+the owner explicitly asked for in wanted_product_ids. Then reply in at most 4 short lines, no lists, no markdown:
+what the plan does for THEIR business in plain words (mention the 2-3 most important products by name, tied to
+what they told you), the monthly total and one-time setup. The screen shows the itemised bill below your message,
+so do not repeat quantities or per-item prices. End by saying they can change services or choose a longer
+plan for a lower price on the next screen.
 - Use ONLY prices and products returned by the tool. Never invent prices, discounts or products.
 - If a product they wanted is in "blocked", explain why kindly and what we added instead.
 - No GSTIN: reassure them that they still get a bundle without GST paperwork, and that GST-only products
@@ -67,17 +100,19 @@ class AdvisorSession:
         self.profile = {}
         self.bundle = None
         self.vault = {}  # privacy token -> real value, never leaves the backend
-        self.chat = client().chats.create(model=MODEL, config=types.GenerateContentConfig(
+        self.config = types.GenerateContentConfig(
             system_instruction=ADVISOR_PROMPT.format(language=self.language, catalogue=CATALOGUE_TEXT),
             tools=[self.update_profile, self.verify_gstin, self.recommend_bundle],
             temperature=0.3,
-        ))
+        )
+        self.history = []
 
     # ---- tools (the model calls these; docstrings are what it sees) ----
     def update_profile(self, business_type: str = "", segment: str = "", employees: int = 0, sites: int = 0,
                        city: str = "", has_gstin: str = "", current_internet: str = "", needs: str = "") -> dict:
         """Save what you learned about the business. Only pass fields you learned; leave others empty.
         segment: one of micro, prof, multi, mfg. has_gstin: "yes" or "no".
+        business_type, city and needs: always in English (e.g. city "Lucknow", not "लखनऊ").
         current_internet: e.g. Mobile hotspot, Home broadband, Business broadband, Leased line, None."""
         p = self.profile
         if business_type: p["business_type"] = business_type
@@ -109,7 +144,8 @@ class AdvisorSession:
         wanted = [w for w in (wanted_product_ids or []) if w in cat.PRODUCTS]
         scores = score_products(self.profile)
         b = cat.build_bundle(self.profile, scores, wanted)
-        b["scores"] = dict(sorted(scores.items(), key=lambda kv: -kv[1])[:8])
+        b["scores"] = [{"id": p, "name": cat.PRODUCTS[p]["name"], "score": s}
+                       for p, s in sorted(scores.items(), key=lambda kv: -kv[1])[:8]]
         self.bundle = b
         q = b["quote"]
         return {
@@ -128,8 +164,14 @@ class AdvisorSession:
     def send(self, text):
         """Returns (reply for the owner, exactly what the model was sent)."""
         safe = tokenize(text, self.vault)
-        reply = self.chat.send_message(safe).text or ""
-        return detokenize(reply, self.vault), safe
+
+        def turn(model):
+            chat = client().chats.create(model=model, config=self.config, history=self.history)
+            reply = chat.send_message(safe).text or ""
+            self.history = chat.get_history()
+            return reply
+
+        return detokenize(with_fallback(turn), self.vault), safe
 
 
 EXTRACT_PROMPT = """This is a photo or scan of an Indian business KYC document. Identify its type and read it.
@@ -140,13 +182,39 @@ use "". legible: false if the image is too blurred, cropped or dark to read the 
 Return JSON: {"doc_type": "...", "legible": true, "fields": {"Label": "value", ...}}"""
 
 
+# the same photo is only ever read once: results are cached by image hash (no image is stored)
+CACHE_FILE = Path(__file__).parent / "fixtures" / "extract_cache.json"
+_cache = json.loads(CACHE_FILE.read_text(encoding="utf-8")) if CACHE_FILE.exists() else {}
+
+
+MIN_SHARPNESS = 100  # sample docs score 940+; the blurred K04 certificate scores 1
+
+
+def sharpness(data: bytes) -> float:
+    """Variance of the Laplacian: a standard blur score. Low = blurred."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+    g = np.asarray(Image.open(io.BytesIO(data)).convert("L"), dtype=float)
+    lap = 4 * g[1:-1, 1:-1] - g[:-2, 1:-1] - g[2:, 1:-1] - g[1:-1, :-2] - g[1:-1, 2:]
+    return float(lap.var())
+
+
 def extract_document(data: bytes, mime_type: str) -> dict:
-    resp = client().models.generate_content(
-        model=MODEL,
-        contents=[types.Part.from_bytes(data=data, mime_type=mime_type), EXTRACT_PROMPT],
-        config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0),
-    )
-    out = json.loads(resp.text)
+    # blurred photos are rejected before any model call: faster for the owner, no wasted quota
+    if mime_type.startswith("image/") and sharpness(data) < MIN_SHARPNESS:
+        return {"doc_type": "unknown", "fields": {"_unreadable": True}}
+    key = hashlib.sha256(data).hexdigest()
+    if key not in _cache:
+        resp = with_fallback(lambda m: client().models.generate_content(
+            model=m,
+            contents=[types.Part.from_bytes(data=data, mime_type=mime_type), EXTRACT_PROMPT],
+            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0),
+        ))
+        _cache[key] = json.loads(resp.text)
+        CACHE_FILE.write_text(json.dumps(_cache, indent=1, ensure_ascii=False), encoding="utf-8")
+    out = _cache[key]
     doc_type = out.get("doc_type", "other")
     fields = kyc.canonical(doc_type, out.get("fields") or {})
     if not out.get("legible", True):

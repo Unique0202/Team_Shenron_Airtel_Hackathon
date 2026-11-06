@@ -33,11 +33,11 @@ export default function UnderTheHood({ profile, bundle, modelSaw, kyc }:
           <section>
             <h3 className="mb-2 font-semibold">3. ML ranking: likely fit for this business</h3>
             <ul className="space-y-1">
-              {Object.entries(bundle.scores ?? {}).map(([id, s]) => (
-                <li key={id} className="flex items-center gap-2">
-                  <span className="w-9 text-slate">{id}</span>
-                  <span className="h-2 flex-1 rounded bg-wash"><span className="block h-2 rounded bg-red" style={{ width: `${s * 100}%` }} /></span>
-                  <span className="w-9 text-right tabular-nums">{Math.round(s * 100)}</span>
+              {(bundle.scores ?? []).map(({ id, name, score }) => (
+                <li key={id} className="grid grid-cols-[9.5rem_1fr_2rem] items-center gap-2">
+                  <span className="truncate" title={name}>{name}</span>
+                  <span className="h-2 rounded bg-wash"><span className="block h-2 rounded bg-red" style={{ width: `${score * 100}%` }} /></span>
+                  <span className="text-right tabular-nums">{Math.round(score * 100)}</span>
                 </li>
               ))}
             </ul>

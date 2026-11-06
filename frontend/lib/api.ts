@@ -32,7 +32,7 @@ export type Quote = {
 };
 export type Bundle = {
   items: Item[]; addons: (Item & { name: string })[]; reasons: Record<string, string>;
-  blocked: Record<string, string>; quote: Quote; scores?: Record<string, number>;
+  blocked: Record<string, string>; quote: Quote; scores?: { id: string; name: string; score: number }[];
 };
 export type Profile = Record<string, string | number | boolean>;
 export type ChatOut = { session_id: string; reply: string; model_saw: string; profile: Profile; bundle: Bundle | null };

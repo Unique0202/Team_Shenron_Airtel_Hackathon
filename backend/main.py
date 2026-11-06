@@ -3,6 +3,13 @@ import os
 import random
 import uuid
 from datetime import date, timedelta
+from pathlib import Path
+
+# local dev: read backend/.env (on Render the key is set as an environment variable)
+_env = Path(__file__).parent / ".env"
+for _line in _env.read_text().splitlines() if _env.exists() else []:
+    if "=" in _line and not _line.startswith("#"):
+        os.environ.setdefault(*map(str.strip, _line.split("=", 1)))
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -14,7 +21,7 @@ import kyc
 from ranker import propensity
 
 app = FastAPI(title="Airtel Udyam API")
-app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("ALLOWED_ORIGINS", "*").split(","),
+app.add_middleware(CORSMiddleware, allow_origins=(os.environ.get("ALLOWED_ORIGINS") or "*").split(","),
                    allow_methods=["*"], allow_headers=["*"])
 
 # ponytail: in-memory state, fine for a demo; move to Postgres/Redis when it has to survive restarts
@@ -137,9 +144,6 @@ def kyc_validate(body: KycIn):
 
 
 # ---------------- orders / tracker ----------------
-STEPS = ["Order placed", "KYC verified", "Agreement e-signed", "Installation scheduled", "Installed", "Service active"]
-
-
 class OrderIn(BaseModel):
     items: list[Item]
     contract_months: int = 12
@@ -147,11 +151,19 @@ class OrderIn(BaseModel):
     kyc_status: str = "verified"
 
 
+def _steps(o):
+    ready = o["quote"]["ready_in_days"]
+    steps = [("Order placed", 0), ("KYC verified", 0), ("Agreement e-signed", 0), ("Installation scheduled", 1)]
+    if any(l["id"] in ("P07", "P08") for l in o["quote"]["lines"]):
+        # DoT rule: each business SIM stays inactive until its user completes e-KYC
+        steps.append(("SIM users complete e-KYC (OTP link sent to each user)", 1))
+    return steps + [("Installed", ready), ("Service active", ready)]
+
+
 def _timeline(o):
     start = date.fromisoformat(o["created"])
-    days = [0, 0, 0, 1, o["quote"]["ready_in_days"], o["quote"]["ready_in_days"]]
     return [{"step": s, "expected": (start + timedelta(days=d)).isoformat(), "done": i <= o["step"]}
-            for i, (s, d) in enumerate(zip(STEPS, days))]
+            for i, (s, d) in enumerate(_steps(o))]
 
 
 @app.post("/orders")
@@ -174,7 +186,7 @@ def order(oid: str):
     start = date.fromisoformat(o["created"])
     lines = [{"name": l["name"], "qty": l["qty"],
               "ready_by": (start + timedelta(days=l["install_days"])).isoformat()} for l in o["quote"]["lines"]]
-    return {**o, "status": STEPS[o["step"]], "timeline": _timeline(o), "lines": lines}
+    return {**o, "status": _steps(o)[o["step"]][0], "timeline": _timeline(o), "lines": lines}
 
 
 @app.post("/orders/{oid}/advance")
@@ -183,7 +195,7 @@ def advance(oid: str):
     o = ORDERS.get(oid) or {}
     if not o:
         raise HTTPException(404, "order not found")
-    o["step"] = min(o["step"] + 1, len(STEPS) - 1)
+    o["step"] = min(o["step"] + 1, len(_steps(o)) - 1)
     return order(oid)
 
 

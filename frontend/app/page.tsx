@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Advisor, { Msg } from "@/components/Advisor";
 import Kyc from "@/components/Kyc";
 import QuoteBill from "@/components/QuoteBill";
@@ -24,6 +24,10 @@ export default function Home() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [hood, setHood] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step]);
 
   function onReply(out: ChatOut) {
     setSessionId(out.session_id);

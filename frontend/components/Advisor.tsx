@@ -30,7 +30,9 @@ export default function Advisor({ language, messages, setMessages, sessionId, on
   const end = useRef<HTMLDivElement>(null);
   const lang = LANGUAGES.find((l) => l.name === language) ?? LANGUAGES[0];
 
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [messages, busy]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, busy]);
 
   async function send(msg: string) {
     if (!msg.trim() || busy) return;

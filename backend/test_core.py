@@ -13,6 +13,9 @@ from ranker import score_products
 assert all(kyc.gstin_format(g)[0] for g in kyc.GSTIN_DB), "checksum rejects a registry GSTIN"
 assert not kyc.gstin_format("32TTNXB7384T1ZX")[0]
 assert kyc.near_gstins("08YKZXS8189L1ZO") == ["08YKZXS5189L1ZO"]
+assert kyc.near_gstins("08YKZXS8189L1Z0") == ["08YKZXS5189L1ZO"]  # O read as 0 still finds the original
+assert kyc.fix_gstin_ocr("19E0GXH4115Y1ZL") == "19EOGXH4115Y1ZL"  # misread recovered (K02, tilted scan)
+assert kyc.fix_gstin_ocr("08YKZXS8189L1Z0") == "08YKZXS8189L1Z0"  # but a tampered digit is never "fixed" (K06)
 
 # 2. KYC answer key we derived for the 12 sample applicants (fixtures transcribed from data/kyc_documents)
 EXPECTED_ERRORS = {

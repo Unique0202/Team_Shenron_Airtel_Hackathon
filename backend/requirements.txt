@@ -7,3 +7,4 @@ joblib==1.5.3
 google-genai==3.0.0
 python-multipart==0.0.32
 pydantic==2.14.3
+pillow==12.1.0

@@ -100,9 +100,9 @@ One **orchestrator** routes the conversation to three specialist agents. Each ag
 ### 2.7 Repo layout
 ```
 analysis/   eda.py (numbers for the deck) · train_ranker.py (→ backend/models/)
-backend/    main.py (API) · catalogue.py (rules + pricing + bundle) · ranker.py · kyc.py
-            agents.py (orchestrator + 3 agents) · privacy.py (tokenize/mask) · orders.py · test_core.py
-frontend/   Next.js app: /, /advisor, /quote, /kyc, /track/[id], /partner (stretch)
+backend/    main.py (API + orders + partner console) · catalogue.py (rules + pricing + bundle) · ranker.py · kyc.py
+            agents.py (advisor + KYC agents, model fallback) · privacy.py (tokenize/mask) · test_core.py · eval_kyc.py
+frontend/   Next.js app: / (the 4-step journey), /track/[id], /partner
 deck/       build_deck.py → Shenron_IIITD.pptx + .pdf (built on the official template)
 ```
 

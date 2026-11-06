@@ -68,6 +68,26 @@ def gstin_format(g):
     return True, ""
 
 
+TO_LETTER = str.maketrans("0158", "OISB")
+TO_DIGIT = str.maketrans("OISBZ", "01582")
+
+
+def fix_gstin_ocr(g):
+    """Undo common photo misreads (O/0, I/1, S/5, B/8) using the GSTIN structure: letters where the format
+    needs letters, digits where it needs digits. Accepted only if the result passes the checksum, so a
+    genuinely altered number still fails."""
+    g = (g or "").strip().upper().replace(" ", "")
+    if len(g) != 15 or gstin_format(g)[0]:
+        return g
+    kinds = "DDLLLLLDDDDLAZA"  # D digit, L letter, A either, Z literal
+    fixed = "".join(c.translate(TO_DIGIT) if k == "D" else c.translate(TO_LETTER) if k == "L" else c
+                    for c, k in zip(g, kinds))
+    for cand in {fixed, fixed[:14] + fixed[14].translate(TO_LETTER), fixed[:14] + fixed[14].translate(TO_DIGIT)}:
+        if gstin_format(cand)[0]:
+            return cand
+    return g
+
+
 def lookup_gstin(g):
     g = (g or "").strip().upper()
     ok, why = gstin_format(g)
@@ -92,7 +112,9 @@ def near_gstins(g):
     g = (g or "").strip().upper()
     if len(g) != 15:
         return []
-    return [r for r in GSTIN_DB if sum(a != b for a, b in zip(r, g)) == 1]
+    same_glyph = str.maketrans("OI", "01")  # O/0 and I/1 are easy to misread on a photo; don't count them
+    g = g.translate(same_glyph)
+    return [r for r in GSTIN_DB if sum(a != b for a, b in zip(r.translate(same_glyph), g)) == 1]
 
 
 def mask(s, keep_start=6, keep_end=4):
@@ -155,7 +177,7 @@ def validate(docs):
     # --- GST certificate vs GST registry
     reg_g = None
     if gst and not gst.get("_unreadable"):
-        g = gst.get("GSTIN", "")
+        g = fix_gstin_ocr(gst.get("GSTIN", ""))
         ok, why = gstin_format(g)
         near = [] if ok else near_gstins(g)
         add("gstin_format", ok, "GSTIN format and check digit are valid" if ok else why + (
