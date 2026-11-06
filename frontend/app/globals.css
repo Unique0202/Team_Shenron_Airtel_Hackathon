@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-red: #e40000;
+  --color-red-deep: #a8000f;
+  --color-ink: #1b1e25;
+  --color-slate: #5b6472;
+  --color-line: #e3e6eb;
+  --color-wash: #f3f5f8;
+  --color-paper: #ffffff;
+  --color-ok: #0f7a45;
+  --color-warn: #a35f00;
+  --font-sans: var(--font-hind), system-ui, sans-serif;
+  --font-display: var(--font-baloo), var(--font-hind), system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-wash);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-red);
+  outline-offset: 2px;
+}
+
+/* the quote is printed like a shop bill: torn top and bottom edges */
+.bill {
+  --tear: radial-gradient(circle at 6px 0, transparent 5px, #000 5.5px);
+  mask: var(--tear) top / 12px 51% repeat-x, radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) bottom / 12px 51% repeat-x;
+}
+
+.leader {
+  flex: 1;
+  border-bottom: 1.5px dotted var(--color-line);
+  margin: 0 0.4rem 0.35rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .print-in {
+    animation: print-in 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+}
+
+@keyframes print-in {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}

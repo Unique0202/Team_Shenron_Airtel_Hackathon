@@ -1,2 +1,11 @@
 .git
 /screenshots
+__pycache__/
+.venv/
+.env
+.env.local
+node_modules/
+.next/
+AGENTS.md
+CLAUDE.md
+.playwright-mcp/
