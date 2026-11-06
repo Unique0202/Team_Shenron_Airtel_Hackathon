@@ -19,7 +19,7 @@ OUT = Path(__file__).resolve().parent
 SHOTS = OUT / "screens"
 
 # fill these in before the final export
-LIVE_URL = "https://airtel-udyam.vercel.app"
+LIVE_URL = "https://airtel-udyam-kappa.vercel.app"
 REPO_URL = "https://github.com/Unique0202/Team_Shenron_Airtel_Hackathon"
 MEMBERS = "Member One · Member Two"
 

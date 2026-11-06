@@ -1,4 +1,5 @@
-export const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// trailing slashes stripped: "https://x.onrender.com/" + "/chat" would 404
+export const API = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 async function handle<T>(r: Response): Promise<T> {
   const j = await r.json().catch(() => ({}));
