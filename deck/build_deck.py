@@ -21,7 +21,7 @@ SHOTS = OUT / "screens"
 # fill these in before the final export
 LIVE_URL = "https://airtel-udyam-kappa.vercel.app"
 REPO_URL = "https://github.com/Unique0202/Team_Shenron_Airtel_Hackathon"
-MEMBERS = "Member One · Member Two"
+MEMBERS = "Unique · Mayank Kataria"
 
 RED, RED_DEEP = RGBColor(0xE4, 0x00, 0x00), RGBColor(0xA8, 0x00, 0x0F)
 INK, SLATE, GREY = RGBColor(0x1B, 0x1E, 0x25), RGBColor(0x5B, 0x64, 0x72), RGBColor(0x6B, 0x72, 0x80)
@@ -213,6 +213,10 @@ text(s, 0.62, 3.78, 4.6, 0.9, [
     [("Team Shenron, IIITD", {"bold": True, "size": 12})],
     [(MEMBERS, {"size": 10.5})],
 ], color=WHITE, spacing=1.15)
+# dark panel so the links stay legible over the template's binary-digit artwork
+panel = box(s, 0.5, 4.44, 4.25, 0.56, fill=RGBColor(0, 0, 0), line=None)
+panel.fill._xPr.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr").append(
+    etree.fromstring('<a:alpha xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" val="60000"/>'))
 # one link per text box: PowerPoint's PDF export drops the second link in a shared box
 text(s, 0.62, 4.52, 4.8, 0.22, [[("Live prototype  ", {"bold": True}), (LIVE_URL, {"link": LIVE_URL})]],
      size=9.5, color=WHITE)
