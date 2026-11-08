@@ -21,6 +21,8 @@ SHOTS = OUT / "screens"
 # fill these in before the final export
 LIVE_URL = "https://airtel-udyam-kappa.vercel.app"
 REPO_URL = "https://github.com/Unique0202/Team_Shenron_Airtel_Hackathon"
+VIDEO_URL = "https://drive.google.com/file/d/1Ly7lmifTXcCZkLr1BLtUhO75VAqkdvGu/view?usp=drive_link"
+VIDEO_LABEL = "Watch demo video"
 MEMBERS = "Unique · Mayank Kataria"
 
 RED, RED_DEEP = RGBColor(0xE4, 0x00, 0x00), RGBColor(0xA8, 0x00, 0x0F)
@@ -214,7 +216,7 @@ text(s, 0.62, 3.78, 4.6, 0.9, [
     [(MEMBERS, {"size": 10.5})],
 ], color=WHITE, spacing=1.15)
 # dark panel so the links stay legible over the template's binary-digit artwork
-panel = box(s, 0.5, 4.44, 4.25, 0.56, fill=RGBColor(0, 0, 0), line=None)
+panel = box(s, 0.5, 4.44, 4.25, 0.81, fill=RGBColor(0, 0, 0), line=None)
 panel.fill._xPr.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr").append(
     etree.fromstring('<a:alpha xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" val="60000"/>'))
 # one link per text box: PowerPoint's PDF export drops the second link in a shared box
@@ -222,6 +224,10 @@ text(s, 0.62, 4.52, 4.8, 0.22, [[("Live prototype  ", {"bold": True}), (LIVE_URL
      size=9.5, color=WHITE)
 text(s, 0.62, 4.74, 4.8, 0.22, [[("Code  ", {"bold": True}), (REPO_URL.replace("https://", ""), {"link": REPO_URL})]],
      size=9.5, color=WHITE)
+video = text(s, 0.62, 4.98, 4.0, 0.22, [[(VIDEO_LABEL, {"bold": True, "link": VIDEO_URL})]],
+             size=9.5, color=WHITE)
+video.name = "Demo video hyperlink"
+video.text_frame.paragraphs[0].runs[0].font.underline = True
 
 # ---------------------------------------------------------------- slide 2: problem in data
 s = content_template
@@ -473,6 +479,8 @@ if "--pdf" in sys.argv:
     import fitz
     doc = fitz.open(pdf)
     for page in doc:
+        for rect in page.search_for(VIDEO_LABEL):
+            page.insert_link({"kind": fitz.LINK_URI, "from": rect, "uri": VIDEO_URL})
         for url in (LIVE_URL, REPO_URL):
             for needle in {url, url.replace("https://", "")}:
                 for rect in page.search_for(needle):
